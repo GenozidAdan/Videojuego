@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viaje al Parque</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: #87CEEB;
+            overflow: hidden;
+            border: 3px solid #333;
+        }
+        #startScreen, #levelCompleteScreen, #gameOverScreen, #gameWinScreen {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        #gameScreen {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        #player {
+            position: absolute;
+            width: 40px;
+            height: 60px;
+            background-color: red;
+            z-index: 10;
+        }
+        .obstacle {
+            position: absolute;
+            z-index: 5;
+        }
+        .powerup {
+            position: absolute;
+            z-index: 5;
+        }
+        #goal {
+            position: absolute;
+            width: 60px;
+            height: 80px;
+            background-color: green;
+            z-index: 5;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+            z-index: 20;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .energy-bar {
+            height: 20px;
+            background-color: #f1f1f1;
+            border-radius: 10px;
+            margin: 5px 0;
+            overflow: hidden;
+        }
+        .energy-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 100%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <!-- Pantalla de inicio -->
+        <div id="startScreen">
+            <h1>Viaje al Parque</h1>
+            <p>Ayuda al personaje a recorrer el parque, evitando obstáculos y recolectando potenciadores.</p>
+            <p>¡Cuidado con tu energía! Si llega a cero, perderás velocidad.</p>
+            <button id="startButton">Comenzar Juego</button>
+        </div>
+
+        <!-- Pantalla de nivel completado -->
+        <div id="levelCompleteScreen" style="display: none;">
+            <h1>¡Nivel Completado!</h1>
+            <p id="levelCompleteText"></p>
+            <button id="nextLevelButton">Siguiente Nivel</button>
+        </div>
+
+        <!-- Pantalla de juego terminado -->
+        <div id="gameOverScreen" style="display: none;">
+            <h1>¡Juego Terminado!</h1>
+            <p id="gameOverText"></p>
+            <button id="restartButton">Reiniciar Juego</button>
+        </div>
+
+        <!-- Pantalla de victoria -->
+        <div id="gameWinScreen" style="display: none;">
+            <h1>¡Felicidades!</h1>
+            <p>¡Has completado todos los niveles del parque!</p>
+            <p id="finalScoreText"></p>
+            <button id="playAgainButton">Jugar de Nuevo</button>
+        </div>
+
+        <!-- Pantalla de juego -->
+        <div id="gameScreen" style="display: none;">
+            <div id="ui">
+                <div>Nivel: <span id="levelDisplay">1</span></div>
+                <div>Puntaje: <span id="scoreDisplay">0</span></div>
+                <div>Vidas: <span id="livesDisplay">3</span></div>
+                <div>Tiempo: <span id="timeDisplay">0</span>s</div>
+                <div>Energía:</div>
+                <div class="energy-bar">
+                    <div class="energy-fill" id="energyBar"></div>
+                </div>
+            </div>
+            <div id="player"></div>
+            <div id="goal"></div>
+            <!-- Obstáculos y potenciadores se generan dinámicamente -->
+        </div>
+    </div>
+
+    <script>
+        // Variables del juego
+        let gameRunning = false;
+        let currentLevel = 1;
+        let score = 0;
+        let lives = 3;
+        let energy = 100;
+        let time = 0;
+        let timerInterval;
+        let gameInterval;
+        let playerSpeed = 5;
+        let normalSpeed = 5;
+        let slowSpeed = 2;
+        let levelTimeLimit = 60; // 60 segundos por nivel
+        let levelComplete = false;
+        let obstacles = [];
+        let powerups = [];
+        let keys = {};
+        let playerShield = false;
+
+        // Elementos del DOM
+        const startScreen = document.getElementById('startScreen');
+        const gameScreen = document.getElementById('gameScreen');
+        const levelCompleteScreen = document.getElementById('levelCompleteScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const gameWinScreen = document.getElementById('gameWinScreen');
+        const player = document.getElementById('player');
+        const goal = document.getElementById('goal');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const livesDisplay = document.getElementById('livesDisplay');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const energyBar = document.getElementById('energyBar');
+        const levelCompleteText = document.getElementById('levelCompleteText');
+        const gameOverText = document.getElementById('gameOverText');
+        const finalScoreText = document.getElementById('finalScoreText');
+
+        // Configuración de los niveles
+        const levels = [
+            { // Nivel 1
+                name: "Entrada al Parque",
+                description: "Evita los charcos y llega al cartel de entrada",
+                obstacles: [
+                    { type: "charco", count: 5, width: 60, height: 40, color: "#1E90FF" }
+                ],
+                powerups: [
+                    { type: "refresco", count: 3, width: 30, height: 40, color: "#FF6347" }
+                ],
+                goalPosition: { x: 700, y: 250 }
+            },
+            { // Nivel 2
+                name: "Zona de Juegos",
+                description: "Esquiva los columpios rotos y recolecta zapatillas turbo",
+                obstacles: [
+                    { type: "columpio", count: 7, width: 50, height: 80, color: "#8B4513" }
+                ],
+                powerups: [
+                    { type: "zapatilla", count: 4, width: 40, height: 20, color: "#FFFF00" }
+                ],
+                goalPosition: { x: 700, y: 450 }
+            },
+            { // Nivel 3
+                name: "Laberinto Vegetal",
+                description: "Encuentra la salida antes de que cierre el parque",
+                obstacles: [
+                    { type: "arbusto", count: 15, width: 40, height: 40, color: "#228B22" }
+                ],
+                powerups: [
+                    { type: "sombrilla", count: 2, width: 40, height: 60, color: "#9370DB" }
+                ],
+                goalPosition: { x: 700, y: 300 }
+            }
+        ];
+
+        // Event listeners para los botones
+        document.getElementById('startButton').addEventListener('click', startGame);
+        document.getElementById('nextLevelButton').addEventListener('click', nextLevel);
+        document.getElementById('restartButton').addEventListener('click', restartGame);
+        document.getElementById('playAgainButton').addEventListener('click', restartGame);
+
+        // Event listeners para el teclado
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        // Función para iniciar el juego
+        function startGame() {
+            startScreen.style.display = 'none';
+            gameScreen.style.display = 'block';
+            currentLevel = 1;
+            score = 0;
+            lives = 3;
+            energy = 100;
+            setupLevel(currentLevel);
+            gameRunning = true;
+            startTimer();
+            gameInterval = setInterval(updateGame, 20);
+        }
+
+        // Función para configurar un nivel
+        function setupLevel(levelNum) {
+            // Limpiar nivel anterior
+            clearLevel();
+            levelComplete = false;
+            time = 0;
+            
+            const level = levels[levelNum - 1];
+            levelDisplay.textContent = levelNum;
+            
+            // Posicionar al jugador
+            player.style.left = '50px';
+            player.style.top = '250px';
+            
+            // Posicionar la meta
+            goal.style.left = level.goalPosition.x + 'px';
+            goal.style.top = level.goalPosition.y + 'px';
+            
+            // Crear obstáculos
+            level.obstacles.forEach(obstacleType => {
+                for (let i = 0; i < obstacleType.count; i++) {
+                    createObstacle(obstacleType);
+                }
+            });
+            
+            // Crear potenciadores
+            level.powerups.forEach(powerupType => {
+                for (let i = 0; i < powerupType.count; i++) {
+                    createPowerup(powerupType);
+                }
+            });
+        }
+
+        // Función para crear un obstáculo
+        function createObstacle(type) {
+            const obstacle = document.createElement('div');
+            obstacle.className = 'obstacle';
+            obstacle.style.width = type.width + 'px';
+            obstacle.style.height = type.height + 'px';
+            obstacle.style.backgroundColor = type.color;
+            
+            // Posición aleatoria que no se superponga con el jugador o la meta
+            let x, y;
+            do {
+                x = Math.random() * (750 - type.width);
+                y = Math.random() * (550 - type.height);
+            } while (
+                (x < 150 && y < 350 && y > 150) || // Zona cerca del jugador
+                (Math.abs(x - 700) < 100 && Math.abs(y - levels[currentLevel-1].goalPosition.y) < 100) // Zona cerca de la meta
+            );
+            
+            obstacle.style.left = x + 'px';
+            obstacle.style.top = y + 'px';
+            
+            // Asignar tipo para detección de colisiones
+            obstacle.dataset.type = type.type;
+            
+            gameScreen.appendChild(obstacle);
+            obstacles.push(obstacle);
+        }
+
+        // Función para crear un potenciador
+        function createPowerup(type) {
+            const powerup = document.createElement('div');
+            powerup.className = 'powerup';
+            powerup.style.width = type.width + 'px';
+            powerup.style.height = type.height + 'px';
+            powerup.style.backgroundColor = type.color;
+            
+            // Posición aleatoria
+            const x = Math.random() * (750 - type.width);
+            const y = Math.random() * (550 - type.height);
+            
+            powerup.style.left = x + 'px';
+            powerup.style.top = y + 'px';
+            
+            // Asignar tipo para efectos
+            powerup.dataset.type = type.type;
+            
+            gameScreen.appendChild(powerup);
+            powerups.push(powerup);
+        }
+
+        // Función para limpiar el nivel
+        function clearLevel() {
+            obstacles.forEach(obstacle => {
+                if (obstacle.parentNode) {
+                    obstacle.parentNode.removeChild(obstacle);
+                }
+            });
+            
+            powerups.forEach(powerup => {
+                if (powerup.parentNode) {
+                    powerup.parentNode.removeChild(powerup);
+                }
+            });
+            
+            obstacles = [];
+            powerups = [];
+        }
+
+        // Función para iniciar el temporizador
+        function startTimer() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                time++;
+                timeDisplay.textContent = time;
+                
+                // Reducir energía con el tiempo
+                if (gameRunning && !levelComplete) {
+                    energy -= 0.5;
+                    updateEnergyBar();
+                    
+                    if (energy <= 0) {
+                        energy = 0;
+                        playerSpeed = slowSpeed;
+                    }
+                }
+                
+                // Verificar límite de tiempo
+                if (time >= levelTimeLimit && !levelComplete) {
+                    loseLife();
+                }
+            }, 1000);
+        }
+
+        // Función para actualizar la barra de energía
+        function updateEnergyBar() {
+            energyBar.style.width = energy + '%';
+            
+            if (energy > 50) {
+                energyBar.style.backgroundColor = '#4CAF50';
+            } else if (energy > 20) {
+                energyBar.style.backgroundColor = '#FFC107';
+            } else {
+                energyBar.style.backgroundColor = '#F44336';
+            }
+        }
+
+        // Función principal de actualización del juego
+        function updateGame() {
+            if (!gameRunning || levelComplete) return;
+            
+            // Mover al jugador según las teclas presionadas
+            const playerRect = player.getBoundingClientRect();
+            const gameRect = gameScreen.getBoundingClientRect();
+            const playerX = playerRect.left - gameRect.left;
+            const playerY = playerRect.top - gameRect.top;
+            
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                if (playerY > 0) {
+                    player.style.top = (playerY - playerSpeed) + 'px';
+                    if (keys['Shift']) energy -= 0.2; // Correr rápido gasta más energía
+                }
+            }
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+                if (playerY < gameRect.height - playerRect.height) {
+                    player.style.top = (playerY + playerSpeed) + 'px';
+                    if (keys['Shift']) energy -= 0.2;
+                }
+            }
+            if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+                if (playerX > 0) {
+                    player.style.left = (playerX - playerSpeed) + 'px';
+                    if (keys['Shift']) energy -= 0.2;
+                }
+            }
+            if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+                if (playerX < gameRect.width - playerRect.width) {
+                    player.style.left = (playerX + playerSpeed) + 'px';
+                    if (keys['Shift']) energy -= 0.2;
+                }
+            }
+            
+            // Actualizar energía
+            if (energy <= 0) {
+                energy = 0;
+                playerSpeed = slowSpeed;
+            }
+            updateEnergyBar();
+            
+            // Detectar colisiones con obstáculos
+            obstacles.forEach(obstacle => {
+                if (checkCollision(player, obstacle)) {
+                    if (playerShield) {
+                        playerShield = false;
+                        player.style.backgroundColor = 'red'; // Quitar escudo visual
+                    } else {
+                        loseLife();
+                    }
+                    
+                    // Reposicionar obstáculo (opcional)
+                    const type = levels[currentLevel-1].obstacles[0];
+                    obstacle.style.left = Math.random() * (750 - type.width) + 'px';
+                    obstacle.style.top = Math.random() * (550 - type.height) + 'px';
+                    
+                    return;
+                }
+            });
+            
+            // Detectar colisiones con potenciadores
+            powerups.forEach((powerup, index) => {
+                if (checkCollision(player, powerup)) {
+                    applyPowerup(powerup.dataset.type);
+                    gameScreen.removeChild(powerup);
+                    powerups.splice(index, 1);
+                    return;
+                }
+            });
+            
+            // Detectar colisión con la meta
+            if (checkCollision(player, goal)) {
+                completeLevel();
+            }
+        }
+
+        // Función para verificar colisiones
+        function checkCollision(element1, element2) {
+            const rect1 = element1.getBoundingClientRect();
+            const rect2 = element2.getBoundingClientRect();
+            
+            return !(
+                rect1.right < rect2.left || 
+                rect1.left > rect2.right || 
+                rect1.bottom < rect2.top || 
+                rect1.top > rect2.bottom
+            );
+        }
+
+        // Función para aplicar efectos de potenciadores
+        function applyPowerup(type) {
+            score += 50;
+            scoreDisplay.textContent = score;
+            
+            switch(type) {
+                case 'refresco':
+                    energy = Math.min(100, energy + 30);
+                    break;
+                case 'zapatilla':
+                    playerSpeed = normalSpeed + 3;
+                    setTimeout(() => {
+                        playerSpeed = normalSpeed;
+                    }, 5000);
+                    break;
+                case 'sombrilla':
+                    playerShield = true;
+                    player.style.backgroundColor = 'blue'; // Escudo visual
+                    break;
+            }
+            
+            updateEnergyBar();
+        }
+
+        // Función para perder una vida
+        function loseLife() {
+            lives--;
+            livesDisplay.textContent = lives;
+            
+            if (lives <= 0) {
+                gameOver();
+            } else {
+                // Respawn del jugador
+                player.style.left = '50px';
+                player.style.top = '250px';
+                energy = 100;
+                playerSpeed = normalSpeed;
+                updateEnergyBar();
+            }
+        }
+
+        // Función para completar un nivel
+        function completeLevel() {
+            levelComplete = true;
+            clearInterval(timerInterval);
+            
+            // Bonus por tiempo restante
+            const timeBonus = Math.max(0, levelTimeLimit - time) * 10;
+            score += timeBonus;
+            scoreDisplay.textContent = score;
+            
+            if (currentLevel >= levels.length) {
+                // Juego completado
+                gameWin();
+            } else {
+                // Mostrar pantalla de nivel completado
+                gameScreen.style.display = 'none';
+                levelCompleteScreen.style.display = 'flex';
+                levelCompleteText.textContent = 
+                    `¡${levels[currentLevel-1].name} completado! 
+                    Puntos: +${timeBonus} por tiempo restante. 
+                    Total: ${score}`;
+            }
+        }
+
+        // Función para pasar al siguiente nivel
+        function nextLevel() {
+            currentLevel++;
+            levelCompleteScreen.style.display = 'none';
+            gameScreen.style.display = 'block';
+            setupLevel(currentLevel);
+            levelComplete = false;
+            startTimer();
+        }
+
+        // Función para cuando el juego termina (sin vidas)
+        function gameOver() {
+            gameRunning = false;
+            clearInterval(gameInterval);
+            clearInterval(timerInterval);
+            gameScreen.style.display = 'none';
+            gameOverScreen.style.display = 'flex';
+            gameOverText.textContent = `Puntaje final: ${score}`;
+        }
+
+        // Función para cuando se ganan todos los niveles
+        function gameWin() {
+            gameRunning = false;
+            clearInterval(gameInterval);
+            gameScreen.style.display = 'none';
+            gameWinScreen.style.display = 'flex';
+            finalScoreText.textContent = `¡Puntaje final: ${score}!`;
+        }
+
+        // Función para reiniciar el juego
+        function restartGame() {
+            gameOverScreen.style.display = 'none';
+            gameWinScreen.style.display = 'none';
+            startGame();
+        }
+    </script>
+</body>
+</html>
