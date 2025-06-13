@@ -14,6 +14,7 @@
             height: 100vh;
             background-color: #f0f0f0;
             font-family: Arial, sans-serif;
+            overflow: hidden;
         }
         #gameContainer {
             position: relative;
@@ -22,6 +23,8 @@
             background-color: #87CEEB;
             overflow: hidden;
             border: 3px solid #333;
+            background-image: url('https://c4.wallpaperflare.com/wallpaper/490/847/712/fiction-horror-slenderman-slender-wallpaper-preview.jpg');
+            background-size: cover;
         }
         #startScreen, #levelCompleteScreen, #gameOverScreen, #gameWinScreen {
             position: absolute;
@@ -34,6 +37,7 @@
             justify-content: center;
             align-items: center;
             z-index: 100;
+            text-align: center;
         }
         #gameScreen {
             position: relative;
@@ -42,25 +46,39 @@
         }
         #player {
             position: absolute;
-            width: 40px;
-            height: 60px;
-            background-color: red;
+            width: 60px;
+            height: 80px;
             z-index: 10;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            transition: transform 0.1s;
+            image-rendering: pixelated;
         }
         .obstacle {
             position: absolute;
             z-index: 5;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
         }
         .powerup {
             position: absolute;
             z-index: 5;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            animation: float 2s ease-in-out infinite;
         }
         #goal {
             position: absolute;
             width: 60px;
             height: 80px;
-            background-color: green;
             z-index: 5;
+            background-image: url('https://cdn-icons-png.flaticon.com/512/484/484167.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
         }
         #ui {
             position: absolute;
@@ -72,6 +90,7 @@
             background-color: rgba(0, 0, 0, 0.5);
             padding: 10px;
             border-radius: 5px;
+            text-shadow: 1px 1px 2px black;
         }
         button {
             padding: 10px 20px;
@@ -82,9 +101,11 @@
             color: white;
             border: none;
             border-radius: 5px;
+            transition: all 0.3s;
         }
         button:hover {
             background-color: #45a049;
+            transform: scale(1.05);
         }
         .energy-bar {
             height: 20px;
@@ -92,12 +113,59 @@
             border-radius: 10px;
             margin: 5px 0;
             overflow: hidden;
+            width: 150px;
         }
         .energy-fill {
             height: 100%;
             background-color: #4CAF50;
             width: 100%;
             transition: width 0.3s;
+        }
+        .powerup-effect {
+            position: absolute;
+            pointer-events: none;
+            z-index: 15;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        #mobileControls {
+            display: none;
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            justify-content: center;
+            z-index: 30;
+        }
+        .mobile-btn {
+            width: 60px;
+            height: 60px;
+            margin: 0 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            user-select: none;
+        }
+        @media (max-width: 800px) {
+            #gameContainer {
+                width: 100vw;
+                height: 100vh;
+                border: none;
+            }
+            #mobileControls {
+                display: flex;
+            }
         }
     </style>
 </head>
@@ -106,9 +174,15 @@
         <!-- Pantalla de inicio -->
         <div id="startScreen">
             <h1>Viaje al Parque</h1>
-            <p>Ayuda al personaje a recorrer el parque, evitando obstáculos y recolectando potenciadores.</p>
+            <p>Ayuda a Oiareal a recorrer el parque, evitando obstáculos y recolectando potenciadores.</p>
             <p>¡Cuidado con tu energía! Si llega a cero, perderás velocidad.</p>
             <button id="startButton">Comenzar Juego</button>
+            <div style="margin-top: 20px;">
+                <p>Controles:</p>
+                <p>PC: Teclas WASD o flechas</p>
+                <p>Móvil: Botones en pantalla</p>
+                <p>Correr: Shift (PC) o botón RUN</p>
+            </div>
         </div>
 
         <!-- Pantalla de nivel completado -->
@@ -148,6 +222,15 @@
             <div id="player"></div>
             <div id="goal"></div>
             <!-- Obstáculos y potenciadores se generan dinámicamente -->
+            
+            <!-- Controles móviles -->
+            <div id="mobileControls">
+                <div class="mobile-btn" id="upBtn">↑</div>
+                <div class="mobile-btn" id="leftBtn">←</div>
+                <div class="mobile-btn" id="downBtn">↓</div>
+                <div class="mobile-btn" id="rightBtn">→</div>
+                <div class="mobile-btn" id="runBtn">RUN</div>
+            </div>
         </div>
     </div>
 
@@ -170,6 +253,28 @@
         let powerups = [];
         let keys = {};
         let playerShield = false;
+        let lastDirection = 'right';
+        let animationFrameId;
+        let isMobile = false;
+
+        // URLs de imágenes
+        const IMAGES = {
+            player: 'https://candidaturas.ine.mx/cycc/img/fotocandidato/3.jpg',
+            playerShield: 'https://img-07.stickers.cloud/packs/6ac4b0fb-e479-45e1-93fd-074a7ec5c197/webp/748f6b8b-6823-4a73-989c-31a10a6579ef.webp',
+            goal: 'https://static.wikia.nocookie.net/minecraft_gamepedia/images/4/4c/Swamp_hut_JE4_BE2.png/revision/latest?cb=20191229162745',
+            obstacles: {
+                charco: 'https://img.freepik.com/vector-premium/derrame-agua-o-charco-ilustracion-elemento-diseno-vector-liquido-aislado-sobre-fondo-blanco_342166-204.jpg',
+                columpio: 'https://images.vexels.com/media/users/3/151916/isolated/preview/1b805d7808c29d9d2bdb59f4a6b11cb7-icono-de-columpio-de-patio.png',
+                arbusto: 'https://static.vecteezy.com/system/resources/previews/009/313/120/non_2x/green-bush-bushes-free-png.png',
+                roca: 'https://images.vexels.com/media/users/3/145874/isolated/preview/b55eccb8fb67c9fd017e5df9f47cab3e-roca-de-piedra.png'
+            },
+            powerups: {
+                refresco: 'https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/3bab34bc-9c8a-4e6e-9497-2f2bac0917a3/dbeapxc-bf1181d5-7316-4171-917a-59fd478c1d7f.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcLzNiYWIzNGJjLTljOGEtNGU2ZS05NDk3LTJmMmJhYzA5MTdhM1wvZGJlYXB4Yy1iZjExODFkNS03MzE2LTQxNzEtOTE3YS01OWZkNDc4YzFkN2YucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.yq1VJIklf0E9BRUw9QPlGO0roWNHhxerL8FXBJE5Y0Y',
+                zapatilla: 'https://media.fortniteapi.io/images/2fdb2ab8b5c2f62c8511007a3d93d0b5/transparent.png',
+                sombrilla: 'https://media.fortniteapi.io/images/cc3d57d62c47997b9690bb2a90948a1b/transparent.png',
+                energia: 'https://papeleriarm.com.uy/wp-content/uploads/2020/12/coppertop_aa-640x640-1.png'
+            }
+        };
 
         // Elementos del DOM
         const startScreen = document.getElementById('startScreen');
@@ -188,40 +293,55 @@
         const gameOverText = document.getElementById('gameOverText');
         const finalScoreText = document.getElementById('finalScoreText');
 
+        // Controles móviles
+        const upBtn = document.getElementById('upBtn');
+        const leftBtn = document.getElementById('leftBtn');
+        const downBtn = document.getElementById('downBtn');
+        const rightBtn = document.getElementById('rightBtn');
+        const runBtn = document.getElementById('runBtn');
+
         // Configuración de los niveles
         const levels = [
             { // Nivel 1
                 name: "Entrada al Parque",
                 description: "Evita los charcos y llega al cartel de entrada",
                 obstacles: [
-                    { type: "charco", count: 5, width: 60, height: 40, color: "#1E90FF" }
+                    { type: "charco", count: 5, width: 60, height: 60 }
                 ],
                 powerups: [
-                    { type: "refresco", count: 3, width: 30, height: 40, color: "#FF6347" }
+                    { type: "refresco", count: 3, width: 30, height: 40 },
+                    { type: "energia", count: 2, width: 30, height: 30 }
                 ],
-                goalPosition: { x: 700, y: 250 }
+                goalPosition: { x: 700, y: 250 },
+                background: 'https://img.freepik.com/foto-gratis/textura-o-fondo-pared-yeso-calido_1194-602031.jpg?semt=ais_hybrid&w=740'
             },
             { // Nivel 2
                 name: "Zona de Juegos",
                 description: "Esquiva los columpios rotos y recolecta zapatillas turbo",
                 obstacles: [
-                    { type: "columpio", count: 7, width: 50, height: 80, color: "#8B4513" }
+                    { type: "columpio", count: 7, width: 50, height: 80 },
+                    { type: "roca", count: 3, width: 50, height: 50 }
                 ],
                 powerups: [
-                    { type: "zapatilla", count: 4, width: 40, height: 20, color: "#FFFF00" }
+                    { type: "zapatilla", count: 4, width: 40, height: 20 },
+                    { type: "energia", count: 2, width: 30, height: 30 }
                 ],
-                goalPosition: { x: 700, y: 450 }
+                goalPosition: { x: 700, y: 450 },
+                background: 'https://img.freepik.com/foto-gratis/textura-o-fondo-pared-yeso-calido_1194-602031.jpg?semt=ais_hybrid&w=740'
             },
             { // Nivel 3
                 name: "Laberinto Vegetal",
                 description: "Encuentra la salida antes de que cierre el parque",
                 obstacles: [
-                    { type: "arbusto", count: 15, width: 40, height: 40, color: "#228B22" }
+                    { type: "arbusto", count: 15, width: 40, height: 40 },
+                    { type: "roca", count: 5, width: 50, height: 50 }
                 ],
                 powerups: [
-                    { type: "sombrilla", count: 2, width: 40, height: 60, color: "#9370DB" }
+                    { type: "sombrilla", count: 2, width: 40, height: 60 },
+                    { type: "energia", count: 3, width: 30, height: 30 }
                 ],
-                goalPosition: { x: 700, y: 300 }
+                goalPosition: { x: 700, y: 300 },
+                background: 'https://img.freepik.com/foto-gratis/textura-o-fondo-pared-yeso-calido_1194-602031.jpg?semt=ais_hybrid&w=740'
             }
         ];
 
@@ -234,14 +354,50 @@
         // Event listeners para el teclado
         document.addEventListener('keydown', (e) => {
             keys[e.key] = true;
+            
+            // Actualizar dirección del personaje
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                lastDirection = 'right';
+                player.style.transform = 'scaleX(1)';
+            } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                lastDirection = 'left';
+                player.style.transform = 'scaleX(-1)';
+            }
         });
 
         document.addEventListener('keyup', (e) => {
             keys[e.key] = false;
         });
 
+        // Controles móviles
+        upBtn.addEventListener('touchstart', () => { keys['ArrowUp'] = true; });
+        upBtn.addEventListener('touchend', () => { keys['ArrowUp'] = false; });
+        leftBtn.addEventListener('touchstart', () => { 
+            keys['ArrowLeft'] = true; 
+            lastDirection = 'left';
+            player.style.transform = 'scaleX(-1)';
+        });
+        leftBtn.addEventListener('touchend', () => { keys['ArrowLeft'] = false; });
+        downBtn.addEventListener('touchstart', () => { keys['ArrowDown'] = true; });
+        downBtn.addEventListener('touchend', () => { keys['ArrowDown'] = false; });
+        rightBtn.addEventListener('touchstart', () => { 
+            keys['ArrowRight'] = true; 
+            lastDirection = 'right';
+            player.style.transform = 'scaleX(1)';
+        });
+        rightBtn.addEventListener('touchend', () => { keys['ArrowRight'] = false; });
+        runBtn.addEventListener('touchstart', () => { keys['Shift'] = true; });
+        runBtn.addEventListener('touchend', () => { keys['Shift'] = false; });
+
+        // Detectar si es móvil
+        function checkIfMobile() {
+            isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            return isMobile;
+        }
+
         // Función para iniciar el juego
         function startGame() {
+            checkIfMobile();
             startScreen.style.display = 'none';
             gameScreen.style.display = 'block';
             currentLevel = 1;
@@ -251,7 +407,7 @@
             setupLevel(currentLevel);
             gameRunning = true;
             startTimer();
-            gameInterval = setInterval(updateGame, 20);
+            gameLoop();
         }
 
         // Función para configurar un nivel
@@ -264,11 +420,18 @@
             const level = levels[levelNum - 1];
             levelDisplay.textContent = levelNum;
             
-            // Posicionar al jugador
+            // Cambiar fondo del nivel
+            gameContainer.style.backgroundImage = `url('${level.background}')`;
+            
+            // Configurar jugador
+            player.style.backgroundImage = `url('${IMAGES.player}')`;
             player.style.left = '50px';
             player.style.top = '250px';
+            player.style.transform = 'scaleX(1)';
+            lastDirection = 'right';
             
             // Posicionar la meta
+            goal.style.backgroundImage = `url('${IMAGES.goal}')`;
             goal.style.left = level.goalPosition.x + 'px';
             goal.style.top = level.goalPosition.y + 'px';
             
@@ -293,17 +456,52 @@
             obstacle.className = 'obstacle';
             obstacle.style.width = type.width + 'px';
             obstacle.style.height = type.height + 'px';
-            obstacle.style.backgroundColor = type.color;
+            obstacle.style.backgroundImage = `url('${IMAGES.obstacles[type.type]}')`;
             
             // Posición aleatoria que no se superponga con el jugador o la meta
-            let x, y;
+            let x, y, overlapping;
+            const maxAttempts = 100;
+            let attempts = 0;
+            
             do {
+                overlapping = false;
                 x = Math.random() * (750 - type.width);
                 y = Math.random() * (550 - type.height);
-            } while (
-                (x < 150 && y < 350 && y > 150) || // Zona cerca del jugador
-                (Math.abs(x - 700) < 100 && Math.abs(y - levels[currentLevel-1].goalPosition.y) < 100) // Zona cerca de la meta
-            );
+                
+                // Verificar superposición con jugador
+                if (x < 150 && y < 350 && y > 150) {
+                    overlapping = true;
+                }
+                
+                // Verificar superposición con meta
+                const goalPos = levels[currentLevel-1].goalPosition;
+                if (Math.abs(x - goalPos.x) < 100 && Math.abs(y - goalPos.y) < 100) {
+                    overlapping = true;
+                }
+                
+                // Verificar superposición con otros obstáculos
+                for (const otherObstacle of obstacles) {
+                    const otherRect = {
+                        x: parseFloat(otherObstacle.style.left),
+                        y: parseFloat(otherObstacle.style.top),
+                        width: parseFloat(otherObstacle.style.width),
+                        height: parseFloat(otherObstacle.style.height)
+                    };
+                    
+                    if (
+                        x < otherRect.x + otherRect.width &&
+                        x + type.width > otherRect.x &&
+                        y < otherRect.y + otherRect.height &&
+                        y + type.height > otherRect.y
+                    ) {
+                        overlapping = true;
+                        break;
+                    }
+                }
+                
+                attempts++;
+                if (attempts >= maxAttempts) break;
+            } while (overlapping);
             
             obstacle.style.left = x + 'px';
             obstacle.style.top = y + 'px';
@@ -321,11 +519,72 @@
             powerup.className = 'powerup';
             powerup.style.width = type.width + 'px';
             powerup.style.height = type.height + 'px';
-            powerup.style.backgroundColor = type.color;
+            powerup.style.backgroundImage = `url('${IMAGES.powerups[type.type]}')`;
             
-            // Posición aleatoria
-            const x = Math.random() * (750 - type.width);
-            const y = Math.random() * (550 - type.height);
+            // Posición aleatoria que no se superponga con obstáculos
+            let x, y, overlapping;
+            const maxAttempts = 100;
+            let attempts = 0;
+            
+            do {
+                overlapping = false;
+                x = Math.random() * (750 - type.width);
+                y = Math.random() * (550 - type.height);
+                
+                // Verificar superposición con jugador
+                if (x < 150 && y < 350 && y > 150) {
+                    overlapping = true;
+                }
+                
+                // Verificar superposición con meta
+                const goalPos = levels[currentLevel-1].goalPosition;
+                if (Math.abs(x - goalPos.x) < 100 && Math.abs(y - goalPos.y) < 100) {
+                    overlapping = true;
+                }
+                
+                // Verificar superposición con obstáculos
+                for (const obstacle of obstacles) {
+                    const obstacleRect = {
+                        x: parseFloat(obstacle.style.left),
+                        y: parseFloat(obstacle.style.top),
+                        width: parseFloat(obstacle.style.width),
+                        height: parseFloat(obstacle.style.height)
+                    };
+                    
+                    if (
+                        x < obstacleRect.x + obstacleRect.width &&
+                        x + type.width > obstacleRect.x &&
+                        y < obstacleRect.y + obstacleRect.height &&
+                        y + type.height > obstacleRect.y
+                    ) {
+                        overlapping = true;
+                        break;
+                    }
+                }
+                
+                // Verificar superposición con otros powerups
+                for (const otherPowerup of powerups) {
+                    const otherRect = {
+                        x: parseFloat(otherPowerup.style.left),
+                        y: parseFloat(otherPowerup.style.top),
+                        width: parseFloat(otherPowerup.style.width),
+                        height: parseFloat(otherPowerup.style.height)
+                    };
+                    
+                    if (
+                        x < otherRect.x + otherRect.width &&
+                        x + type.width > otherRect.x &&
+                        y < otherRect.y + otherRect.height &&
+                        y + type.height > otherRect.y
+                    ) {
+                        overlapping = true;
+                        break;
+                    }
+                }
+                
+                attempts++;
+                if (attempts >= maxAttempts) break;
+            } while (overlapping);
             
             powerup.style.left = x + 'px';
             powerup.style.top = y + 'px';
@@ -393,7 +652,15 @@
             }
         }
 
-        // Función principal de actualización del juego
+        // Bucle principal del juego usando requestAnimationFrame
+        function gameLoop() {
+            if (!gameRunning || levelComplete) return;
+            
+            updateGame();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // Función de actualización del juego
         function updateGame() {
             if (!gameRunning || levelComplete) return;
             
@@ -403,29 +670,46 @@
             const playerX = playerRect.left - gameRect.left;
             const playerY = playerRect.top - gameRect.top;
             
+            let moving = false;
+            
             if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                 if (playerY > 0) {
                     player.style.top = (playerY - playerSpeed) + 'px';
                     if (keys['Shift']) energy -= 0.2; // Correr rápido gasta más energía
+                    moving = true;
                 }
             }
             if (keys['ArrowDown'] || keys['s'] || keys['S']) {
                 if (playerY < gameRect.height - playerRect.height) {
                     player.style.top = (playerY + playerSpeed) + 'px';
                     if (keys['Shift']) energy -= 0.2;
+                    moving = true;
                 }
             }
             if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
                 if (playerX > 0) {
                     player.style.left = (playerX - playerSpeed) + 'px';
                     if (keys['Shift']) energy -= 0.2;
+                    moving = true;
+                    lastDirection = 'left';
+                    player.style.transform = 'scaleX(-1)';
                 }
             }
             if (keys['ArrowRight'] || keys['d'] || keys['D']) {
                 if (playerX < gameRect.width - playerRect.width) {
                     player.style.left = (playerX + playerSpeed) + 'px';
                     if (keys['Shift']) energy -= 0.2;
+                    moving = true;
+                    lastDirection = 'right';
+                    player.style.transform = 'scaleX(1)';
                 }
+            }
+            
+            // Efecto de movimiento
+            if (moving) {
+                player.style.animation = 'pulse 0.3s ease-in-out infinite';
+            } else {
+                player.style.animation = 'none';
             }
             
             // Actualizar energía
@@ -440,15 +724,18 @@
                 if (checkCollision(player, obstacle)) {
                     if (playerShield) {
                         playerShield = false;
-                        player.style.backgroundColor = 'red'; // Quitar escudo visual
+                        player.style.backgroundImage = `url('${IMAGES.player}')`;
+                        createPowerupEffect(player, 'shield-break');
                     } else {
                         loseLife();
                     }
                     
                     // Reposicionar obstáculo (opcional)
-                    const type = levels[currentLevel-1].obstacles[0];
-                    obstacle.style.left = Math.random() * (750 - type.width) + 'px';
-                    obstacle.style.top = Math.random() * (550 - type.height) + 'px';
+                    const type = levels[currentLevel-1].obstacles.find(o => o.type === obstacle.dataset.type);
+                    if (type) {
+                        obstacle.style.left = Math.random() * (750 - type.width) + 'px';
+                        obstacle.style.top = Math.random() * (550 - type.height) + 'px';
+                    }
                     
                     return;
                 }
@@ -457,7 +744,7 @@
             // Detectar colisiones con potenciadores
             powerups.forEach((powerup, index) => {
                 if (checkCollision(player, powerup)) {
-                    applyPowerup(powerup.dataset.type);
+                    applyPowerup(powerup.dataset.type, powerup);
                     gameScreen.removeChild(powerup);
                     powerups.splice(index, 1);
                     return;
@@ -470,23 +757,77 @@
             }
         }
 
-        // Función para verificar colisiones
+        // Función para crear efectos de powerups
+        function createPowerupEffect(element, type) {
+            const effect = document.createElement('div');
+            effect.className = 'powerup-effect';
+            effect.style.width = '100px';
+            effect.style.height = '100px';
+            effect.style.left = element.style.left;
+            effect.style.top = element.style.top;
+            
+            switch(type) {
+                case 'shield':
+                    effect.style.background = 'radial-gradient(circle, rgba(0,100,255,0.7), transparent)';
+                    effect.style.borderRadius = '50%';
+                    effect.style.border = '3px solid blue';
+                    break;
+                case 'shield-break':
+                    effect.style.background = 'radial-gradient(circle, rgba(255,100,0,0.7), transparent)';
+                    effect.style.borderRadius = '50%';
+                    effect.style.border = '3px solid orange';
+                    break;
+                case 'speed':
+                    effect.style.background = 'radial-gradient(circle, rgba(255,255,0,0.7), transparent)';
+                    effect.style.borderRadius = '50%';
+                    break;
+                default:
+                    effect.style.background = 'radial-gradient(circle, rgba(255,255,255,0.7), transparent)';
+                    effect.style.borderRadius = '50%';
+            }
+            
+            gameScreen.appendChild(effect);
+            
+            // Animación de desvanecimiento
+            let opacity = 1;
+            const fadeEffect = setInterval(() => {
+                opacity -= 0.05;
+                effect.style.opacity = opacity;
+                effect.style.width = (parseFloat(effect.style.width) + 5) + 'px';
+                effect.style.height = (parseFloat(effect.style.height) + 5) + 'px';
+                if (opacity <= 0) {
+                    clearInterval(fadeEffect);
+                    effect.remove();
+                }
+            }, 50);
+        }
+
+        // Función para verificar colisiones mejorada
         function checkCollision(element1, element2) {
             const rect1 = element1.getBoundingClientRect();
             const rect2 = element2.getBoundingClientRect();
             
-            return !(
-                rect1.right < rect2.left || 
+            // Verificación simple de bounding boxes
+            if (rect1.right < rect2.left || 
                 rect1.left > rect2.right || 
                 rect1.bottom < rect2.top || 
-                rect1.top > rect2.bottom
-            );
+                rect1.top > rect2.bottom) {
+                return false;
+            }
+            
+            // Para colisiones más precisas podríamos añadir lógica adicional aquí
+            // como verificación de círculos o polígonos
+            
+            return true;
         }
 
         // Función para aplicar efectos de potenciadores
-        function applyPowerup(type) {
+        function applyPowerup(type, powerupElement) {
             score += 50;
             scoreDisplay.textContent = score;
+            
+            // Efecto visual al recoger powerup
+            createPowerupEffect(powerupElement, type);
             
             switch(type) {
                 case 'refresco':
@@ -494,13 +835,24 @@
                     break;
                 case 'zapatilla':
                     playerSpeed = normalSpeed + 3;
+                    createPowerupEffect(player, 'speed');
                     setTimeout(() => {
                         playerSpeed = normalSpeed;
                     }, 5000);
                     break;
                 case 'sombrilla':
                     playerShield = true;
-                    player.style.backgroundColor = 'blue'; // Escudo visual
+                    player.style.backgroundImage = `url('${IMAGES.playerShield}')`;
+                    createPowerupEffect(player, 'shield');
+                    setTimeout(() => {
+                        if (playerShield) { // Si no ha sido usado aún
+                            playerShield = false;
+                            player.style.backgroundImage = `url('${IMAGES.player}')`;
+                        }
+                    }, 10000);
+                    break;
+                case 'energia':
+                    energy = Math.min(100, energy + 50);
                     break;
             }
             
@@ -520,7 +872,14 @@
                 player.style.top = '250px';
                 energy = 100;
                 playerSpeed = normalSpeed;
+                playerShield = false;
+                player.style.backgroundImage = `url('${IMAGES.player}')`;
                 updateEnergyBar();
+                
+                // Efecto de daño
+                player.style.animation = 'none';
+                void player.offsetWidth; // Trigger reflow
+                player.style.animation = 'pulse 0.1s ease-in-out 3';
             }
         }
 
@@ -528,6 +887,7 @@
         function completeLevel() {
             levelComplete = true;
             clearInterval(timerInterval);
+            cancelAnimationFrame(animationFrameId);
             
             // Bonus por tiempo restante
             const timeBonus = Math.max(0, levelTimeLimit - time) * 10;
@@ -556,12 +916,13 @@
             setupLevel(currentLevel);
             levelComplete = false;
             startTimer();
+            gameLoop();
         }
 
         // Función para cuando el juego termina (sin vidas)
         function gameOver() {
             gameRunning = false;
-            clearInterval(gameInterval);
+            cancelAnimationFrame(animationFrameId);
             clearInterval(timerInterval);
             gameScreen.style.display = 'none';
             gameOverScreen.style.display = 'flex';
@@ -571,7 +932,7 @@
         // Función para cuando se ganan todos los niveles
         function gameWin() {
             gameRunning = false;
-            clearInterval(gameInterval);
+            cancelAnimationFrame(animationFrameId);
             gameScreen.style.display = 'none';
             gameWinScreen.style.display = 'flex';
             finalScoreText.textContent = `¡Puntaje final: ${score}!`;
